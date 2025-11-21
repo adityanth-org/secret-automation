@@ -16,13 +16,13 @@ def add_secret_to_repo(repo, secret_name: str, secret_value: str):
     """Add a secret to a repository."""
     try:
         # Get the repository's public key for Actions
-        public_key = repo.get_actions_public_key()
+        public_key = repo.get_public_key()
         
         # Encrypt the secret
         encrypted_value = encrypt_secret(public_key.key, secret_value)
         
         # Create or update the secret for GitHub Actions
-        repo.create_secret(secret_name, encrypted_value, public_key.key_id, secret_type="actions")
+        repo.create_secret(secret_name, encrypted_value, public_key.key_id)
         print(f"✓ Added {secret_name} to {repo.full_name}")
         return True
     except Exception as e:

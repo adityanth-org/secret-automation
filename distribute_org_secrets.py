@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
+import requests
 from github import Github, Auth
 from base64 import b64encode
 from nacl import encoding, public
@@ -12,28 +13,46 @@ def encrypt_secret(public_key: str, secret_value: str) -> str:
     encrypted = sealed_box.encrypt(secret_value.encode("utf-8"))
     return b64encode(encrypted).decode("utf-8")
 
-def add_org_secret(org, secret_name: str, secret_value: str, visibility: str = "all"):
-    """Add a secret to an organization.
+def add_org_secret(org_name: str, token: str, secret_name: str, secret_value: str, visibility: str = "all"):
+    """Add a secret to an organization using GitHub REST API.
     
     Args:
-        org: GitHub organization object
+        org_name: Organization name
+        token: GitHub token
         secret_name: Name of the secret
         secret_value: Value of the secret
         visibility: 'all', 'private', or 'selected' (default: 'all')
     """
     try:
+        headers = {
+            'Authorization': f'token {token}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+        
         # Get the organization's public key for Actions
-        public_key = org.get_actions_public_key()
+        public_key_url = f'https://api.github.com/orgs/{org_name}/actions/secrets/public-key'
+        response = requests.get(public_key_url, headers=headers)
+        response.raise_for_status()
+        public_key_data = response.json()
         
         # Encrypt the secret
-        encrypted_value = encrypt_secret(public_key.key, secret_value)
+        encrypted_value = encrypt_secret(public_key_data['key'], secret_value)
         
         # Create or update the organization secret
-        org.create_secret(secret_name, encrypted_value, public_key.key_id, visibility=visibility)
-        print(f"✓ Added {secret_name} to organization {org.login} (visibility: {visibility})")
+        secret_url = f'https://api.github.com/orgs/{org_name}/actions/secrets/{secret_name}'
+        payload = {
+            'encrypted_value': encrypted_value,
+            'key_id': public_key_data['key_id'],
+            'visibility': visibility
+        }
+        
+        response = requests.put(secret_url, headers=headers, json=payload)
+        response.raise_for_status()
+        
+        print(f"✓ Added {secret_name} to organization {org_name} (visibility: {visibility})")
         return True
     except Exception as e:
-        print(f"✗ Failed to add {secret_name} to organization {org.login}: {str(e)}")
+        print(f"✗ Failed to add {secret_name} to organization {org_name}: {str(e)}")
         return False
 
 def main():
@@ -54,33 +73,26 @@ def main():
     
     print(f"Processing organization: {org_name}\n")
     
-    try:
-        org = g.get_organization(org_name)
+    success_count = 0
+    fail_count = 0
+    
+    # Add secrets to organization
+    # visibility options: 'all', 'private', or 'selected'
+    if add_org_secret(org_name, github_token, 'DOCKERHUB_USERNAME', dockerhub_username, visibility='all'):
+        success_count += 1
+    else:
+        fail_count += 1
         
-        success_count = 0
-        fail_count = 0
-        
-        # Add secrets to organization
-        # visibility options: 'all', 'private', or 'selected'
-        if add_org_secret(org, 'DOCKERHUB_USERNAME', dockerhub_username, visibility='all'):
-            success_count += 1
-        else:
-            fail_count += 1
-            
-        if add_org_secret(org, 'DOCKERHUB_PASSWORD', dockerhub_password, visibility='all'):
-            success_count += 1
-        else:
-            fail_count += 1
-        
-        print(f"\nSummary:")
-        print(f"  Successful: {success_count}")
-        print(f"  Failed: {fail_count}")
-        
-        if fail_count > 0:
-            sys.exit(1)
-            
-    except Exception as e:
-        print(f"✗ Error accessing organization {org_name}: {str(e)}")
+    if add_org_secret(org_name, github_token, 'DOCKERHUB_PASSWORD', dockerhub_password, visibility='all'):
+        success_count += 1
+    else:
+        fail_count += 1
+    
+    print(f"\nSummary:")
+    print(f"  Successful: {success_count}")
+    print(f"  Failed: {fail_count}")
+    
+    if fail_count > 0:
         sys.exit(1)
 
 if __name__ == "__main__":
