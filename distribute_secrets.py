@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
-from github import Github
+from github import Github, Auth
 from base64 import b64encode
 from nacl import encoding, public
 
@@ -15,14 +15,14 @@ def encrypt_secret(public_key: str, secret_value: str) -> str:
 def add_secret_to_repo(repo, secret_name: str, secret_value: str):
     """Add a secret to a repository."""
     try:
-        # Get the repository's public key
-        public_key = repo.get_public_key()
+        # Get the repository's public key for Actions
+        public_key = repo.get_actions_public_key()
         
         # Encrypt the secret
         encrypted_value = encrypt_secret(public_key.key, secret_value)
         
-        # Create or update the secret
-        repo.create_secret(secret_name, encrypted_value, public_key.key_id)
+        # Create or update the secret for GitHub Actions
+        repo.create_secret(secret_name, encrypted_value, public_key.key_id, secret_type="actions")
         print(f"✓ Added {secret_name} to {repo.full_name}")
         return True
     except Exception as e:
@@ -39,8 +39,9 @@ def main():
         print("Error: Missing required environment variables")
         sys.exit(1)
     
-    # Initialize GitHub client
-    g = Github(github_token)
+    # Initialize GitHub client with new auth method
+    auth = Auth.Token(github_token)
+    g = Github(auth=auth)
     
     # Read repository list
     try:
