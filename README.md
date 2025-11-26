@@ -21,9 +21,20 @@ This project provides a flexible way to manage organization-level secrets with r
 
 ## Configuration
 
-### 1. Configure `repos1.yaml`
+### 1. Create Organization Secrets First
 
-Define your secrets and which repositories should have access:
+Go to your organization Settings → Secrets and variables → Actions → Secrets and create:
+
+- `ORG_ADMIN_TOKEN` - GitHub PAT with `admin:org` scope (for this workflow)
+- `DOCKERHUB_USERNAME` - Your DockerHub username
+- `DOCKERHUB_PASSWORD` - Your DockerHub password/token
+- Any other secrets you want to distribute
+
+**Important**: When creating these secrets, set visibility to **"Selected repositories"** (you can select any repo initially, the workflow will update it)
+
+### 2. Configure `repos1.yaml`
+
+Define which repositories should have access to each secret:
 
 ```yaml
 secrets:
@@ -50,24 +61,9 @@ secrets:
 ```
 
 **Fields:**
-- `name`: The secret name as it will appear in the organization
-- `org_secret_name`: The name of the existing organization secret to fetch the value from
+- `name`: Display name (can be same as org_secret_name)
+- `org_secret_name`: The exact name of the organization secret
 - `repositories`: List of repository names (without org prefix) that can access this secret
-
-### 2. Setup Organization Secrets
-
-Add these secrets to your **organization** (Settings → Secrets and variables → Actions → Secrets):
-
-- `ORG_ADMIN_TOKEN` - GitHub PAT with `admin:org` scope
-- `DOCKERHUB_USERNAME` - Your DockerHub username
-- `DOCKERHUB_PASSWORD` - Your DockerHub password/token
-- Any other secrets referenced in `repos1.yaml`
-
-### 3. Setup Organization Variables
-
-Add this variable to your **organization** (Settings → Variables → Actions):
-
-- `ORG_NAME` - Your organization name (e.g., "adityanth-org")
 
 ## Usage
 
@@ -87,19 +83,20 @@ The workflow automatically runs when you:
 
 ### Adding New Secrets
 
-1. Add the secret to your organization secrets
-2. Update `repos1.yaml` with the new secret configuration
-3. Add the secret to the workflow's `env` section:
+1. Create the secret in your organization (Settings → Secrets → New organization secret)
+2. Set visibility to **"Selected repositories"**
+3. Update `repos1.yaml` with the new secret configuration:
 
 ```yaml
-env:
-  GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
-  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
-  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}  # Add new secrets here
+secrets:
+  - name: NPM_TOKEN
+    org_secret_name: NPM_TOKEN
+    repositories:
+      - frontend-app
+      - backend-api
 ```
 
-4. Commit and push - the workflow will automatically distribute the secrets
+4. Commit and push - the workflow will automatically update repository access
 
 ## Files
 
@@ -119,11 +116,13 @@ When adding secrets to an organization, you can set visibility:
 
 ## How It Works
 
-1. **Read Configuration**: Parses `repos1.yaml` to get secret definitions
-2. **Fetch Secret Values**: Retrieves secret values from organization secrets (passed via workflow env)
-3. **Set Organization Secrets**: Uses GitHub CLI to create/update organization secrets with `--visibility selected`
-4. **Grant Repository Access**: Automatically grants access only to repositories listed in the configuration
-5. **Access in Workflows**: Selected repositories can now use these secrets in their workflows
+1. **Read Configuration**: Parses `repos1.yaml` to get secret-to-repository mappings
+2. **Fetch Repository IDs**: Uses GitHub API to get repository IDs for each repo name
+3. **Update Secret Access**: Uses GitHub API to update which repositories can access each organization secret
+4. **Maintain Secrets**: The actual secret values remain in organization secrets (never exposed)
+5. **Access in Workflows**: Only the specified repositories can use these secrets in their workflows
+
+**Note**: This workflow manages repository access for existing organization secrets. It does NOT create or update secret values.
 
 ## Example: Using Organization Secrets in Workflows
 
