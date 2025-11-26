@@ -3,7 +3,7 @@ secrets:
     org_secret_name: DOCKERHUB_USERNAME
     repositories:
       - secret-test
-      - secret-test-2
+      # - secret-test-2
       - secret-test-3
       - secret-test-4
       - secret-test-5
@@ -12,7 +12,7 @@ secrets:
     org_secret_name: DOCKERHUB_PASSWORD
     repositories:
       - secret-test
-      - secret-test-2
+      # - secret-test-2
       - secret-test-3
       - secret-test-4
       - secret-test-5
