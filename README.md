@@ -1,13 +1,10 @@
 # GitHub Organization Secret Automation
 
-Automate the distribution of secrets (like DockerHub credentials) to your GitHub organization, making them available to all repositories.
+Automate the distribution of secrets (like DockerHub credentials) to your GitHub organization with fine-grained control over which repositories can access each secret.
 
 ## Overview
 
-This project provides two methods to distribute secrets to your GitHub organization:
-
-1. **GitHub Actions Workflow** (using GitHub CLI) - Recommended for CI/CD automation
-2. **Python Script** (using GitHub REST API) - For local execution or custom integrations
+This project provides a flexible way to manage organization-level secrets with repository-specific access control using a YAML configuration file (`repos1.yaml`). Secrets are fetched from organization secrets and distributed to selected repositories.
 
 ## Features
 
@@ -22,78 +19,95 @@ This project provides two methods to distribute secrets to your GitHub organizat
 - Personal Access Token (PAT) with `admin:org` scope
 - DockerHub credentials (or any other secrets you want to distribute)
 
-## Setup
+## Configuration
 
-### 1. Create GitHub Personal Access Token
+### 1. Configure `repos1.yaml`
 
-1. Go to GitHub Settings → Developer settings → Personal access tokens → Tokens (classic)
-2. Generate new token with these scopes:
-   - `admin:org` (for organization secrets)
-   - `repo` (if needed for repository access)
-3. Save the token securely
+Define your secrets and which repositories should have access:
 
-### 2. Configure Repository Secrets
+```yaml
+secrets:
+  - name: DOCKERHUB_USERNAME
+    org_secret_name: DOCKERHUB_USERNAME
+    repositories:
+      - secret-test
+      - secret-test-2
+      - secret-test-3
+  
+  - name: DOCKERHUB_PASSWORD
+    org_secret_name: DOCKERHUB_PASSWORD
+    repositories:
+      - secret-test
+      - secret-test-2
+      - secret-test-3
+  
+  # Add more secrets as needed
+  - name: NPM_TOKEN
+    org_secret_name: NPM_TOKEN
+    repositories:
+      - frontend-app
+      - backend-api
+```
 
-Add these secrets to your repository (Settings → Secrets and variables → Actions):
+**Fields:**
+- `name`: The secret name as it will appear in the organization
+- `org_secret_name`: The name of the existing organization secret to fetch the value from
+- `repositories`: List of repository names (without org prefix) that can access this secret
 
-- `ORG_ADMIN_TOKEN` - Your GitHub PAT with admin:org scope
+### 2. Setup Organization Secrets
+
+Add these secrets to your **organization** (Settings → Secrets and variables → Actions → Secrets):
+
+- `ORG_ADMIN_TOKEN` - GitHub PAT with `admin:org` scope
 - `DOCKERHUB_USERNAME` - Your DockerHub username
 - `DOCKERHUB_PASSWORD` - Your DockerHub password/token
-- `ORG_NAME` - Your GitHub organization name
+- Any other secrets referenced in `repos1.yaml`
+
+### 3. Setup Organization Variables
+
+Add this variable to your **organization** (Settings → Variables → Actions):
+
+- `ORG_NAME` - Your organization name (e.g., "adityanth-org")
 
 ## Usage
 
-### Method 1: GitHub Actions Workflow (Recommended)
+### Automatic Distribution
 
-Two workflows are available:
+The workflow automatically runs when you:
+- Push changes to `repos1.yaml`
+- Push changes to the workflow file
+- Manually trigger via Actions tab
 
-#### Option A: Using GitHub CLI (`distribute-secrets.yml`)
+### Manual Trigger
+
+1. Go to **Actions** tab in your repository
+2. Select **"Distribute Secrets to Repositories"** workflow
+3. Click **"Run workflow"**
+4. Select branch and click **"Run workflow"**
+
+### Adding New Secrets
+
+1. Add the secret to your organization secrets
+2. Update `repos1.yaml` with the new secret configuration
+3. Add the secret to the workflow's `env` section:
+
 ```yaml
-# Triggers: Manual or on push to main
-# Uses: GitHub CLI (gh)
+env:
+  GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+  NPM_TOKEN: ${{ secrets.NPM_TOKEN }}  # Add new secrets here
 ```
 
-#### Option B: Using Python Script (`distribute-org-secrets.yml`)
-```yaml
-# Triggers: Manual or on push to main
-# Uses: Python with PyGithub and PyNaCl
-```
-
-**To run manually:**
-1. Go to Actions tab in your repository
-2. Select the workflow you want to run
-3. Click "Run workflow"
-4. Select branch and click "Run workflow"
-
-**Automatic trigger:**
-- Both workflows trigger automatically on push to main branch
-
-### Method 2: Local Python Script
-
-**Install dependencies:**
-```bash
-pip install PyGithub PyNaCl requests
-```
-
-**Set environment variables:**
-```bash
-export GITHUB_TOKEN="your_github_pat"
-export DOCKERHUB_USERNAME="your_dockerhub_username"
-export DOCKERHUB_PASSWORD="your_dockerhub_password"
-export ORG_NAME="your_org_name"
-```
-
-**Run the script:**
-```bash
-python distribute_org_secrets.py
-```
+4. Commit and push - the workflow will automatically distribute the secrets
 
 ## Files
 
-- `distribute_org_secrets.py` - Python script to add secrets to organization
-- `.github/workflows/distribute-secrets.yml` - GitHub Actions workflow using GitHub CLI
-- `.github/workflows/distribute-org-secrets.yml` - GitHub Actions workflow using Python script
-- `repos.txt` - List of repositories (for reference, not used by org-level secrets)
+- `repos1.yaml` - Configuration file defining secrets and repository access
+- `.github/workflows/distribute-secrets.yml` - Main workflow using GitHub CLI
+- `.github/workflows/distribute-org-secrets.yml` - Alternative Python-based workflow
+- `distribute_org_secrets.py` - Python script for local execution
+- `repos.txt` - Legacy repository list (kept for reference)
 
 ## Secret Visibility Options
 
@@ -105,10 +119,11 @@ When adding secrets to an organization, you can set visibility:
 
 ## How It Works
 
-1. **Fetch Organization Public Key**: Retrieves the public key from GitHub API
-2. **Encrypt Secrets**: Uses NaCl/libsodium to encrypt secret values
-3. **Upload to Organization**: Creates or updates organization-level secrets via GitHub API
-4. **Access in Workflows**: All repositories can now access these secrets in their workflows
+1. **Read Configuration**: Parses `repos1.yaml` to get secret definitions
+2. **Fetch Secret Values**: Retrieves secret values from organization secrets (passed via workflow env)
+3. **Set Organization Secrets**: Uses GitHub CLI to create/update organization secrets with `--visibility selected`
+4. **Grant Repository Access**: Automatically grants access only to repositories listed in the configuration
+5. **Access in Workflows**: Selected repositories can now use these secrets in their workflows
 
 ## Example: Using Organization Secrets in Workflows
 
